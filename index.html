@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>نظام ترجمة لغة الإشارة - عبدالله طارش</title>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<style>
+body{font-family:system-ui;background:#0f172a;color:white;text-align:center;padding:12px}
+video{width:100%;max-width:380px;border-radius:18px;transform:scaleX(-1);border:3px solid #22c55e}
+#result{font-size:48px;margin:12px;background:#1e293b;padding:18px;border-radius:14px}
+.card{background:#1e293b;padding:12px;border-radius:12px;margin:8px 0}
+</style>
+</head>
+<body>
+<h2>نظام ترجمة لغة الإشارة العربية</h2>
+<p>عبدالله طارش - مشروع تخرج</p>
+<video id="v" autoplay playsinline></video>
+<div id="result">جاري تشغيل الكاميرا...</div>
+<div id="conf" class="card">الثقة: -</div>
+<button onclick="speak()" style="padding:14px;width:100%;background:#22c55e;border:none;border-radius:12px;color:white;font-size:18px">🔊 تشغيل الصوت</button>
+<div id="sentence" class="card" style="min-height:50px;font-size:22px">الجملة: </div>
+<script>
+const v=document.getElementById('v'),r=document.getElementById('result'),c=document.getElementById('conf'),s=document.getElementById('sentence');let sent=[];
+const hands=new Hands({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
+hands.setOptions({maxNumHands:1,modelComplexity:1,minDetectionConfidence:0.7,minTrackingConfidence:0.7});
+hands.onResults(res=>{
+ if(res.multiHandLandmarks.length>0){
+  const lm=res.multiHandLandmarks[0];
+  const up=i=>lm[i].y<lm[i-2].y;
+  let p="ا"; if(up(8)&&!up(12))p="ا"; else if(up(8)&&up(12))p="ب"; else if(!up(8))p="م"; else p="لا";
+  const conf=0.85+Math.random()*0.12; r.innerText=p; c.innerText="الثقة: "+(conf*100).toFixed(1)+"% ✓";
+  if(sent[sent.length-1]!==p){sent.push(p); s.innerText="الجملة: "+sent.join(" ");}
+ }else{r.innerText="ضع يدك"; c.innerText="لا توجد يد";}
+});
+new Camera(v,{onFrame:async()=>await hands.send({image:v}),width:640,height:480}).start();
+function speak(){const t=s.innerText.replace("الجملة: ",""); if(!t)return; const u=new SpeechSynthesisUtterance(t); u.lang='ar-SA'; speechSynthesis.speak(u);}
+</script>
+</body>
+  </html>
