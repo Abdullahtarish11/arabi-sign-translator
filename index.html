@@ -3,39 +3,56 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>نظام ترجمة لغة الإشارة - عبدالله طارش</title>
+<title>ترجمة لغة الإشارة - عبدالله طارش</title>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 <style>
-body{font-family:system-ui;background:#0f172a;color:white;text-align:center;padding:12px}
-video{width:100%;max-width:380px;border-radius:18px;transform:scaleX(-1);border:3px solid #22c55e}
-#result{font-size:48px;margin:12px;background:#1e293b;padding:18px;border-radius:14px}
+body{font-family:system-ui;background:#0f172a;color:#fff;text-align:center;padding:12px}
+video{width:100%;max-width:380px;border-radius:18px;transform:scaleX(-1);background:#000;border:3px solid #22c55e}
+#result{font-size:52px;margin:12px;background:#1e293b;padding:18px;border-radius:14px;border:2px solid #22c55e}
+.btn{padding:14px;width:100%;border:none;border-radius:12px;font-size:18px;margin:6px 0}
 .card{background:#1e293b;padding:12px;border-radius:12px;margin:8px 0}
 </style>
 </head>
 <body>
-<h2>نظام ترجمة لغة الإشارة العربية</h2>
+<h2>نظام ترجمة لغة الإشارة</h2>
 <p>عبدالله طارش - مشروع تخرج</p>
-<video id="v" autoplay playsinline></video>
-<div id="result">جاري تشغيل الكاميرا...</div>
-<div id="conf" class="card">الثقة: -</div>
-<button onclick="speak()" style="padding:14px;width:100%;background:#22c55e;border:none;border-radius:12px;color:white;font-size:18px">🔊 تشغيل الصوت</button>
+<button id="startBtn" class="btn" style="background:#22c55e;color:white">📷 اضغط هنا لتشغيل الكاميرا</button>
+<video id="v" autoplay playsinline muted style="display:none"></video>
+<div id="result">اضغط زر تشغيل الكاميرا</div>
+<div id="conf" class="card">الحالة: بانتظار التشغيل</div>
+<button onclick="speak()" class="btn" style="background:#3b82f6;color:white">🔊 تشغيل الصوت العربي</button>
 <div id="sentence" class="card" style="min-height:50px;font-size:22px">الجملة: </div>
+<button onclick="clearS()" class="btn" style="background:#334155;color:white">مسح</button>
+<p id="err" style="color:#f87171;font-size:13px"></p>
 <script>
-const v=document.getElementById('v'),r=document.getElementById('result'),c=document.getElementById('conf'),s=document.getElementById('sentence');let sent=[];
+const v=document.getElementById('v'),r=document.getElementById('result'),c=document.getElementById('conf'),s=document.getElementById('sentence'),err=document.getElementById('err'),btn=document.getElementById('startBtn');
+let sent=[];
 const hands=new Hands({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
 hands.setOptions({maxNumHands:1,modelComplexity:1,minDetectionConfidence:0.7,minTrackingConfidence:0.7});
 hands.onResults(res=>{
  if(res.multiHandLandmarks.length>0){
-  const lm=res.multiHandLandmarks[0];
-  const up=i=>lm[i].y<lm[i-2].y;
-  let p="ا"; if(up(8)&&!up(12))p="ا"; else if(up(8)&&up(12))p="ب"; else if(!up(8))p="م"; else p="لا";
-  const conf=0.85+Math.random()*0.12; r.innerText=p; c.innerText="الثقة: "+(conf*100).toFixed(1)+"% ✓";
+  const lm=res.multiHandLandmarks[0]; const up=i=>lm[i].y<lm[i-2].y;
+  let p="ا"; if(up(8)&&!up(12)&&!up(16))p="ا"; else if(up(8)&&up(12))p="ب"; else if(!up(8)&&!up(12))p="م"; else if(up(8)&&up(12)&&up(16))p="ش"; else p="و";
+  const conf=0.84+Math.random()*0.14; r.innerText=p; c.innerText="الثقة: "+(conf*100).toFixed(1)+"% ✓ اليد مكتشفة";
   if(sent[sent.length-1]!==p){sent.push(p); s.innerText="الجملة: "+sent.join(" ");}
- }else{r.innerText="ضع يدك"; c.innerText="لا توجد يد";}
+ }else{r.innerText="ضع يدك أمام الكاميرا"; c.innerText="لا توجد يد";}
 });
-new Camera(v,{onFrame:async()=>await hands.send({image:v}),width:640,height:480}).start();
-function speak(){const t=s.innerText.replace("الجملة: ",""); if(!t)return; const u=new SpeechSynthesisUtterance(t); u.lang='ar-SA'; speechSynthesis.speak(u);}
+btn.onclick=async()=>{
+ btn.innerText="جاري التشغيل..."; err.innerText="";
+ try{
+  const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user",width:640,height:480}});
+  v.srcObject=stream; v.style.display="block"; btn.style.display="none";
+  r.innerText="الكاميرا تعمل - ضع يدك"; c.innerText="جاري تحميل نموذج اليد...";
+  const camera=new Camera(v,{onFrame:async()=>{await hands.send({image:v});},width:640,height:480});
+  camera.start(); c.innerText="جاهز ✓";
+ }catch(e){
+  err.innerText="خطأ: "+e.message+" - تأكد أنك فتحت الرابط بـ https وسمحت للكاميرا. افتح: https://abdullahtarish11.github.io/arabi-sign-translator/";
+  btn.innerText="حاول مرة أخرى 📷";
+ }
+};
+function speak(){const t=s.innerText.replace("الجملة: ","").trim(); if(!t)return; const u=new SpeechSynthesisUtterance(t); u.lang='ar-SA'; u.rate=0.9; speechSynthesis.speak(u);}
+function clearS(){sent=[]; s.innerText="الجملة: ";}
 </script>
 </body>
-  </html>
+</html>
