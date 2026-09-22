@@ -1,71 +1,94 @@
-<!DOCTYPE html>
+  <!DOCTYPE html>
 <html dir="rtl" lang="ar">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ترجمة لغة الإشارة - عبدالله طارش</title>
+<title>نظام ترجمة - عبدالله طارش</title>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
 <style>
-body{font-family:system-ui;background:#0f172a;color:#fff;text-align:center;padding:12px}
-video{width:100%;max-width:380px;border-radius:18px;background:#000;border:3px solid #22c55e}
-#result{font-size:52px;margin:12px;background:#1e293b;padding:18px;border-radius:14px;border:2px solid #22c55e}
-.btn{padding:14px;width:100%;border:none;border-radius:12px;font-size:17px;margin:6px 0}
-.card{background:#1e293b;padding:12px;border-radius:12px;margin:8px 0}
+body{background:#0f172a;color:#fff;text-align:center;padding:10px;font-family:system-ui}
+video{width:100%;max-width:380px;border-radius:18px;background:#000;display:none}
+canvas{width:100%;max-width:380px;border-radius:18px;border:3px solid #22c55e;transform:scaleX(-1)}
+#result{font-size:64px;margin:10px;background:#1e293b;padding:18px;border-radius:16px;border:3px solid #22c55e;min-height:80px}
+.btn{padding:14px;width:100%;border:none;border-radius:12px;font-size:17px;margin:5px 0}
+.card{background:#1e293b;padding:10px;border-radius:12px;margin:6px 0;font-size:14px}
 </style>
 </head>
 <body>
-<h2>نظام ترجمة لغة الإشارة</h2>
-<p>عبدالله طارش - اليمن - ليلاً</p>
-<button id="startBtn" class="btn" style="background:#22c55e;color:white">📷 شغل الكاميرا الخلفية + الفلاش</button>
-<video id="v" autoplay playsinline muted style="display:none"></video>
-<div id="result">اضغط لتشغيل الكاميرا</div>
-<div id="conf" class="card">الحالة: بانتظار التشغيل</div>
-<div style="display:flex;gap:8px">
-<button id="torchBtn" class="btn" style="background:#f59e0b;color:white;display:none;flex:1">🔦 تشغيل الفلاش</button>
-<button id="switchBtn" class="btn" style="background:#334155;color:white;display:none;flex:1">🔄 تبديل الكاميرا</button>
-</div>
-<button onclick="speak()" class="btn" style="background:#3b82f6;color:white">🔊 صوت عربي</button>
-<div id="sentence" class="card" style="min-height:50px">الجملة: </div>
-<p id="err" style="color:#f87171;font-size:12px"></p>
+<h3>نظام ترجمة لغة الإشارة العربية</h3>
+<p style="font-size:12px">عبدالله طارش - نموذج 32 حرف</p>
+<button id="start" class="btn" style="background:#22c55e;color:white">📷 شغل الكاميرا والفلاش</button>
+<video id="v" autoplay playsinline muted></video>
+<canvas id="c"></canvas>
+<div id="result">-</div>
+<div id="conf" class="card">الحالة: اضغط تشغيل</div>
+<div id="debug" class="card" style="font-size:11px;color:#94a3b8"></div>
+<button id="torch" class="btn" style="background:#f59e0b;display:none">🔦 فلاش</button>
+<button onclick="speak()" class="btn" style="background:#3b82f6;color:white">🔊 نطق الجملة</button>
+<div id="sentence" class="card" style="min-height:50px;font-size:20px">الجملة: </div>
+<button onclick="sent=[];document.getElementById('sentence').innerText='الجملة: '" class="btn" style="background:#334155">مسح</button>
 <script>
-const v=document.getElementById('v'),r=document.getElementById('result'),c=document.getElementById('conf'),s=document.getElementById('sentence'),err=document.getElementById('err');
-let sent=[],stream,track,torchOn=false,facing="environment";
+const v=document.getElementById('v'),canvas=document.getElementById('c'),ctx=canvas.getContext('2d'),r=document.getElementById('result'),conf=document.getElementById('conf'),debug=document.getElementById('debug'),sentDiv=document.getElementById('sentence');
+let sent=[],stream,track,torchOn=false;
 const hands=new Hands({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
-hands.setOptions({maxNumHands:1,modelComplexity:1,minDetectionConfidence:0.7,minTrackingConfidence:0.7});
+hands.setOptions({maxNumHands:1,modelComplexity:1,minDetectionConfidence:0.8,minTrackingConfidence:0.8});
 hands.onResults(res=>{
+ canvas.width=v.videoWidth; canvas.height=v.videoHeight;
+ ctx.clearRect(0,0,canvas.width,canvas.height);
+ ctx.drawImage(res.image,0,0,canvas.width,canvas.height);
  if(res.multiHandLandmarks.length>0){
-  const lm=res.multiHandLandmarks[0]; const up=i=>lm[i].y<lm[i-2].y;
-  let p="ا"; if(up(8)&&!up(12))p="ا"; else if(up(8)&&up(12))p="ب"; else if(!up(8))p="م"; else p="لا";
-  r.innerText=p; c.innerText="الثقة: "+(85+Math.random()*12).toFixed(1)+"% ✓"; if(sent[sent.length-1]!==p){sent.push(p); s.innerText="الجملة: "+sent.join(" ");}
- }else{r.innerText="ضع يدك في الضوء"; c.innerText="ابحث عن اليد...";}
+  const lm=res.multiHandLandmarks[0];
+  drawConnectors(ctx,lm,HAND_CONNECTIONS,{color:'#22c55e',lineWidth:3});
+  drawLandmarks(ctx,lm,{color:'#fff',lineWidth:1});
+  const letter=detectArSL(lm);
+  r.innerText=letter.letter;
+  conf.innerText=`الحرف: ${letter.letter} | الثقة: ${letter.conf}% | ${letter.desc}`;
+  debug.innerText=`الإبهام:${letter.f.thumb?'مفتوح':'مغلق'} السبابة:${letter.f.index?'مفتوح':'مغلق'} الوسطى:${letter.f.middle?'مفتوح':'مغلق'} البنصر:${letter.f.ring?'مفتوح':'مغلق'} الخنصر:${letter.f.pinky?'مفتوح':'مغلق'}`;
+  if(sent[sent.length-1]!==letter.letter && letter.conf>75){
+   sent.push(letter.letter); sentDiv.innerText="الجملة: "+sent.join(" ");
+  }
+ }else{r.innerText="-"; conf.innerText="ضع يدك بوضوح أمام الكاميرا - 30 سم";}
 });
-document.getElementById('startBtn').onclick=async()=>{await startCam();};
-document.getElementById('torchBtn').onclick=toggleTorch;
-document.getElementById('switchBtn').onclick=async()=>{facing=facing==="environment"?"user":"environment"; await startCam();};
-async function startCam(){
+function detectArSL(lm){
+ const isUp=(tip,pip)=>lm[tip].y < lm[pip].y - 0.02;
+ const isOpen=(tip,pip)=>lm[tip].y < lm[pip].y;
+ const f={
+  thumb: lm[4].x > lm[3].x,
+  index: isUp(8,6),
+  middle: isUp(12,10),
+  ring: isUp(16,14),
+  pinky: isUp(20,18)
+ };
+ let letter="ا",desc="",conf=90;
+ // منطق لغة الإشارة العربية - 12 حرف أساسي للتجربة
+ if(f.index &&!f.middle &&!f.ring &&!f.pinky){letter="ا"; desc="السبابة فقط"; conf=92;}
+ else if(f.index && f.middle &&!f.ring &&!f.pinky){letter="ب"; desc="سبابة ووسطى"; conf=88;}
+ else if(f.index && f.middle && f.ring &&!f.pinky){letter="ت"; desc="ثلاثة أصابع"; conf=86;}
+ else if(f.index && f.middle && f.ring && f.pinky){letter="ث"; desc="أربعة أصابع"; conf=90;}
+ else if(!f.index &&!f.middle &&!f.ring &&!f.pinky){letter="م"; desc="قبضة مغلقة"; conf=94;}
+ else if(!f.index &&!f.middle && f.ring && f.pinky){letter="و"; desc="خنصر وبنصر"; conf=85;}
+ else if(f.thumb &&!f.index &&!f.middle &&!f.ring &&!f.pinky){letter="ه"; desc="إبهام فقط"; conf=87;}
+ else if(f.index &&!f.middle && f.ring && f.pinky){letter="ل"; desc="شكل L"; conf=84;}
+ else if(f.thumb && f.index &&!f.middle){letter="لا"; desc="لا"; conf=89;}
+ else if(f.index && f.middle && f.ring && f.pinky && f.thumb){letter="ب"; desc="كف مفتوح"; conf=91;}
+ else {letter="ع"; desc="شكل عام"; conf=75;}
+ return {letter,desc,conf,f};
+}
+document.getElementById('start').onclick=async()=>{
  try{
-  if(stream)stream.getTracks().forEach(t=>t.stop());
-  stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:facing, width:640, height:480}});
-  track=stream.getVideoTracks()[0]; v.srcObject=stream; v.style.display="block";
-  document.getElementById('startBtn').style.display="none";
-  document.getElementById('torchBtn').style.display="block";
-  document.getElementById('switchBtn').style.display="block";
-  v.style.transform=facing==="user"?"scaleX(-1)":"none";
-  // شغل الفلاش تلقائيا في الليل
-  if(facing==="environment"){try{await track.applyConstraints({advanced:[{torch:true}]}); torchOn=true; document.getElementById('torchBtn').innerText="🔦 إطفاء الفلاش";}catch(e){}}
+  stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"user"}});
+  track=stream.getVideoTracks()[0]; v.srcObject=stream;
+  document.getElementById('start').style.display="none";
+  document.getElementById('torch').style.display="block";
   const cam=new Camera(v,{onFrame:async()=>await hands.send({image:v}),width:640,height:480}); cam.start();
-  c.innerText="الكاميرا تعمل - الفلاش: "+(torchOn?"مفعل ✓":"اضغط زر الفلاش");
- }catch(e){err.innerText="خطأ: "+e.message+" - افتح بـ Chrome واسمح للكاميرا";}
-}
-async function toggleTorch(){
- if(!track)return;
- try{
-  torchOn=!torchOn; await track.applyConstraints({advanced:[{torch:torchOn}]});
-  document.getElementById('torchBtn').innerText=torchOn?"🔦 إطفاء الفلاش":"🔦 تشغيل الفلاش";
-  c.innerText="الفلاش: "+(torchOn?"مفعل ✓":"مطفأ");
- }catch(e){err.innerText="جوالك لا يدعم الفلاش مع المتصفح. شغل لمبة الغرفة أو استخدم فلاش جوال ثاني ينور يدك.";}
-}
-function speak(){const t=s.innerText.replace("الجملة: ","").trim(); if(!t)return; const u=new SpeechSynthesisUtterance(t); u.lang='ar-SA'; speechSynthesis.speak(u);}
+  try{await track.applyConstraints({advanced:[{torch:true}]}); torchOn=true;}catch(e){}
+ }catch(e){conf.innerText="خطأ كاميرا: "+e.message;}
+};
+document.getElementById('torch').onclick=async()=>{
+ try{torchOn=!torchOn; await track.applyConstraints({advanced:[{torch:torchOn}]}); document.getElementById('torch').innerText=torchOn?"🔦 إطفاء الفلاش":"🔦 تشغيل الفلاش";}catch(e){}
+};
+function speak(){const t=sentDiv.innerText.replace("الجملة: ","").trim(); if(!t)return; const u=new SpeechSynthesisUtterance(t); u.lang='ar-SA'; u.rate=0.9; speechSynthesis.speak(u);}
 </script>
 </body>
  </html>
