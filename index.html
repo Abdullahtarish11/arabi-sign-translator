@@ -1,79 +1,104 @@
-  <!DOCTYPE html>
+<!DOCTYPE html>
 <html dir="rtl" lang="ar">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>نظام ترجمة - عبدالله طارش</title>
+<title>مترجم لغة الإشارة - كلمات وجمل</title>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
 <style>
 body{background:#0f172a;color:#fff;text-align:center;padding:10px;font-family:system-ui}
-video{width:100%;max-width:380px;border-radius:18px;background:#000;display:none}
-canvas{width:100%;max-width:380px;border-radius:18px;border:3px solid #22c55e;transform:scaleX(-1)}
-#result{font-size:64px;margin:10px;background:#1e293b;padding:18px;border-radius:16px;border:3px solid #22c55e;min-height:80px}
-.btn{padding:14px;width:100%;border:none;border-radius:12px;font-size:17px;margin:5px 0}
-.card{background:#1e293b;padding:10px;border-radius:12px;margin:6px 0;font-size:14px}
+canvas{width:100%;max-width:380px;border-radius:18px;border:3px solid #22c55e}
+#word{font-size:42px;margin:10px;background:linear-gradient(90deg,#22c55e,#16a34a);padding:20px;border-radius:16px;min-height:70px;font-weight:bold}
+.btn{padding:12px;width:100%;border:none;border-radius:12px;font-size:16px;margin:5px 0}
+.card{background:#1e293b;padding:10px;border-radius:12px;margin:6px 0}
+.word-btn{display:inline-block;background:#334155;padding:8px 14px;margin:4px;border-radius:20px;font-size:14px}
 </style>
 </head>
 <body>
-<h3>نظام ترجمة لغة الإشارة العربية</h3>
-<p style="font-size:12px">عبدالله طارش - نموذج 32 حرف</p>
-<button id="start" class="btn" style="background:#22c55e;color:white">📷 شغل الكاميرا والفلاش</button>
-<video id="v" autoplay playsinline muted></video>
+<h3>مترجم لغة الإشارة - كلمات وجمل</h3>
+<button id="start" class="btn" style="background:#22c55e;color:white">📷 شغل الكاميرا</button>
 <canvas id="c"></canvas>
-<div id="result">-</div>
+<video id="v" autoplay playsinline muted style="display:none"></video>
+<div id="word">-</div>
 <div id="conf" class="card">الحالة: اضغط تشغيل</div>
-<div id="debug" class="card" style="font-size:11px;color:#94a3b8"></div>
+
+<div class="card">
+<b>جرب هذه الإشارات (ثبت يدك 2 ثانية):</b><br>
+<span class="word-btn">👆 = السلام عليكم</span>
+<span class="word-btn">✌️ = مرحبا</span>
+<span class="word-btn">✊ = شكرا</span>
+<span class="word-btn">🤙 = لا</span>
+<span class="word-btn">👍 = نعم</span>
+<span class="word-btn">🖐️ = أهلا</span>
+<span class="word-btn">👌 = ممتاز</span>
+</div>
+
 <button id="torch" class="btn" style="background:#f59e0b;display:none">🔦 فلاش</button>
 <button onclick="speak()" class="btn" style="background:#3b82f6;color:white">🔊 نطق الجملة</button>
-<div id="sentence" class="card" style="min-height:50px;font-size:20px">الجملة: </div>
-<button onclick="sent=[];document.getElementById('sentence').innerText='الجملة: '" class="btn" style="background:#334155">مسح</button>
+<div id="sentence" class="card" style="min-height:60px;font-size:20px;background:#0e1a33;border:2px solid #3b82f6">الجملة: </div>
+<div style="display:flex;gap:6px"><button onclick="clearS()" class="btn" style="background:#334155;flex:1">مسح</button><button onclick="addSpace()" class="btn" style="background:#475569;flex:1">مسافة</button></div>
+
 <script>
-const v=document.getElementById('v'),canvas=document.getElementById('c'),ctx=canvas.getContext('2d'),r=document.getElementById('result'),conf=document.getElementById('conf'),debug=document.getElementById('debug'),sentDiv=document.getElementById('sentence');
-let sent=[],stream,track,torchOn=false;
+const v=document.getElementById('v'),canvas=document.getElementById('c'),ctx=canvas.getContext('2d'),wordDiv=document.getElementById('word'),conf=document.getElementById('conf'),sentDiv=document.getElementById('sentence');
+let sentence=[],stream,track,torchOn=false,lastWord="",lastTime=0;
+const DICT={
+ "INDEX_UP": {text:"السلام عليكم", conf:92},
+ "TWO_FINGERS": {text:"مرحبا", conf:90},
+ "FIST": {text:"شكرا", conf:94},
+ "THUMB_UP": {text:"نعم", conf:93},
+ "THUMB_DOWN": {text:"لا", conf:88},
+ "OPEN_PALM": {text:"أهلا وسهلا", conf:91},
+ "OK_SIGN": {text:"ممتاز", conf:87},
+ "L_SHAPE": {text:"لا أفهم", conf:85},
+ "THREE_FINGERS": {text:"كيف حالك", conf:86},
+ "CALL_ME": {text:"اتصل بي", conf:84}
+};
 const hands=new Hands({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
 hands.setOptions({maxNumHands:1,modelComplexity:1,minDetectionConfidence:0.8,minTrackingConfidence:0.8});
 hands.onResults(res=>{
- canvas.width=v.videoWidth; canvas.height=v.videoHeight;
+ canvas.width=v.videoWidth||640; canvas.height=v.videoHeight||480;
  ctx.clearRect(0,0,canvas.width,canvas.height);
  ctx.drawImage(res.image,0,0,canvas.width,canvas.height);
  if(res.multiHandLandmarks.length>0){
   const lm=res.multiHandLandmarks[0];
   drawConnectors(ctx,lm,HAND_CONNECTIONS,{color:'#22c55e',lineWidth:3});
   drawLandmarks(ctx,lm,{color:'#fff',lineWidth:1});
-  const letter=detectArSL(lm);
-  r.innerText=letter.letter;
-  conf.innerText=`الحرف: ${letter.letter} | الثقة: ${letter.conf}% | ${letter.desc}`;
-  debug.innerText=`الإبهام:${letter.f.thumb?'مفتوح':'مغلق'} السبابة:${letter.f.index?'مفتوح':'مغلق'} الوسطى:${letter.f.middle?'مفتوح':'مغلق'} البنصر:${letter.f.ring?'مفتوح':'مغلق'} الخنصر:${letter.f.pinky?'مفتوح':'مغلق'}`;
-  if(sent[sent.length-1]!==letter.letter && letter.conf>75){
-   sent.push(letter.letter); sentDiv.innerText="الجملة: "+sent.join(" ");
+  const result=classifyWord(lm);
+  wordDiv.innerText=result.text;
+  conf.innerText=`الكلمة: ${result.text} | الثقة: ${result.conf}%`;
+  const now=Date.now();
+  if(result.text!==lastWord && result.conf>80 && now-lastTime>2000){
+   sentence.push(result.text); sentDiv.innerText="الجملة: "+sentence.join(" ");
+   lastWord=result.text; lastTime=now;
+   // نطق تلقائي
+   const u=new SpeechSynthesisUtterance(result.text); u.lang='ar-SA'; u.rate=0.9; speechSynthesis.speak(u);
   }
- }else{r.innerText="-"; conf.innerText="ضع يدك بوضوح أمام الكاميرا - 30 سم";}
+ }else{wordDiv.innerText="ضع يدك..."; conf.innerText="ابحث عن اليد...";}
 });
-function detectArSL(lm){
- const isUp=(tip,pip)=>lm[tip].y < lm[pip].y - 0.02;
- const isOpen=(tip,pip)=>lm[tip].y < lm[pip].y;
+function classifyWord(lm){
+ const isUp=(t,p)=>lm[t].y < lm[p].y - 0.02;
+ const dist=(a,b)=>Math.hypot(lm[a].x-lm[b].x, lm[a].y-lm[b].y);
  const f={
-  thumb: lm[4].x > lm[3].x,
+  thumb: dist(4,9) > 0.12,
   index: isUp(8,6),
   middle: isUp(12,10),
   ring: isUp(16,14),
   pinky: isUp(20,18)
  };
- let letter="ا",desc="",conf=90;
- // منطق لغة الإشارة العربية - 12 حرف أساسي للتجربة
- if(f.index &&!f.middle &&!f.ring &&!f.pinky){letter="ا"; desc="السبابة فقط"; conf=92;}
- else if(f.index && f.middle &&!f.ring &&!f.pinky){letter="ب"; desc="سبابة ووسطى"; conf=88;}
- else if(f.index && f.middle && f.ring &&!f.pinky){letter="ت"; desc="ثلاثة أصابع"; conf=86;}
- else if(f.index && f.middle && f.ring && f.pinky){letter="ث"; desc="أربعة أصابع"; conf=90;}
- else if(!f.index &&!f.middle &&!f.ring &&!f.pinky){letter="م"; desc="قبضة مغلقة"; conf=94;}
- else if(!f.index &&!f.middle && f.ring && f.pinky){letter="و"; desc="خنصر وبنصر"; conf=85;}
- else if(f.thumb &&!f.index &&!f.middle &&!f.ring &&!f.pinky){letter="ه"; desc="إبهام فقط"; conf=87;}
- else if(f.index &&!f.middle && f.ring && f.pinky){letter="ل"; desc="شكل L"; conf=84;}
- else if(f.thumb && f.index &&!f.middle){letter="لا"; desc="لا"; conf=89;}
- else if(f.index && f.middle && f.ring && f.pinky && f.thumb){letter="ب"; desc="كف مفتوح"; conf=91;}
- else {letter="ع"; desc="شكل عام"; conf=75;}
- return {letter,desc,conf,f};
+ const thumbIndexDist=dist(4,8);
+ // تصنيف الكلمات
+ if(f.index &&!f.middle &&!f.ring &&!f.pinky &&!f.thumb) return {text:"السلام عليكم", conf:92};
+ if(f.index && f.middle &&!f.ring &&!f.pinky) return {text:"مرحبا", conf:90};
+ if(!f.index &&!f.middle &&!f.ring &&!f.pinky) return {text:"شكرا", conf:94};
+ if(f.thumb &&!f.index &&!f.middle &&!f.ring &&!f.pinky && lm[4].y < lm[3].y) return {text:"نعم", conf:93};
+ if(f.thumb &&!f.index &&!f.middle && lm[4].y > lm[3].y) return {text:"لا", conf:88};
+ if(f.index && f.middle && f.ring && f.pinky && f.thumb) return {text:"أهلا وسهلا", conf:91};
+ if(thumbIndexDist < 0.05 && f.middle) return {text:"ممتاز", conf:87};
+ if(f.thumb && f.index &&!f.middle &&!f.ring) return {text:"لا أفهم", conf:85};
+ if(f.index && f.middle && f.ring &&!f.pinky) return {text:"كيف حالك", conf:86};
+ if(f.thumb && f.pinky &&!f.index) return {text:"اتصل بي", conf:84};
+ return {text:"...", conf:50};
 }
 document.getElementById('start').onclick=async()=>{
  try{
@@ -82,13 +107,14 @@ document.getElementById('start').onclick=async()=>{
   document.getElementById('start').style.display="none";
   document.getElementById('torch').style.display="block";
   const cam=new Camera(v,{onFrame:async()=>await hands.send({image:v}),width:640,height:480}); cam.start();
-  try{await track.applyConstraints({advanced:[{torch:true}]}); torchOn=true;}catch(e){}
- }catch(e){conf.innerText="خطأ كاميرا: "+e.message;}
+ }catch(e){conf.innerText="خطأ: "+e.message;}
 };
 document.getElementById('torch').onclick=async()=>{
- try{torchOn=!torchOn; await track.applyConstraints({advanced:[{torch:torchOn}]}); document.getElementById('torch').innerText=torchOn?"🔦 إطفاء الفلاش":"🔦 تشغيل الفلاش";}catch(e){}
+ try{torchOn=!torchOn; await track.applyConstraints({advanced:[{torch:torchOn}]});}catch(e){}
 };
-function speak(){const t=sentDiv.innerText.replace("الجملة: ","").trim(); if(!t)return; const u=new SpeechSynthesisUtterance(t); u.lang='ar-SA'; u.rate=0.9; speechSynthesis.speak(u);}
+function speak(){const t=sentDiv.innerText.replace("الجملة: ","").trim(); if(!t)return; const u=new SpeechSynthesisUtterance(t); u.lang='ar-SA'; speechSynthesis.speak(u);}
+function clearS(){sentence=[]; sentDiv.innerText="الجملة: "; lastWord="";}
+function addSpace(){sentence.push(" "); sentDiv.innerText="الجملة: "+sentence.join(" ");}
 </script>
 </body>
- </html>
+</html>
